@@ -6,7 +6,10 @@ import 'package:mixify/main.dart'; // For AppColors
 import 'package:mixify/ui/screens/player_screen.dart';
 import 'package:mixify/ui/screens/search_screen.dart';
 import 'package:mixify/player/mixify_audio_handler.dart';
-
+import 'package:mixify/ui/screens/main_screen.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:mixify/ui/screens/section_view_screen.dart';
 final homeSectionsProvider = FutureProvider<List<HomeSection>>((ref) async {
   final repository = ref.watch(musicRepositoryProvider);
   return repository.getHomeSections();
@@ -16,8 +19,10 @@ class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
   @override
+  @override
   Widget build(BuildContext context, WidgetRef ref) {
     final homeSectionsAsync = ref.watch(homeSectionsProvider);
+    final connectivityAsync = ref.watch(connectivityProvider);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -26,6 +31,7 @@ class HomeScreen extends ConsumerWidget {
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
+            await ref.read(musicRepositoryProvider).clearHomeCache();
             return ref.refresh(homeSectionsProvider.future);
           },
           child: CustomScrollView(
@@ -40,7 +46,7 @@ class HomeScreen extends ConsumerWidget {
                         "Mixify",
                         style: theme.textTheme.displaySmall?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: isDark ? AppColors.yellow : AppColors.black, // Yellow in dark mode
+                          color: isDark ? AppColors.yellow : AppColors.black,
                           letterSpacing: -1,
                         ),
                       ),
@@ -54,52 +60,162 @@ class HomeScreen extends ConsumerWidget {
                   ),
                 ),
               ),
-              homeSectionsAsync.when(
-                data: (sections) {
-                  if (sections.isEmpty) {
+              
+              // Check connectivity first
+              connectivityAsync.when(
+                data: (results) {
+                  final isOffline = results.contains(ConnectivityResult.none);
+                  if (isOffline) {
                     return SliverFillRemaining(
-                      child: Center(child: Text("No content found", style: TextStyle(color: theme.colorScheme.onSurface))),
+                      child: _buildOfflineUI(context, theme),
                     );
                   }
-                  return SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final section = sections[index];
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (index > 0) ...[
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
-                                child: Text(
-                                  section.title,
-                                  style: theme.textTheme.headlineSmall?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: theme.colorScheme.onSurface,
-                                  ),
-                                ),
-                              ),
-                            ],
-                            _buildHorizontalList(context, section.items, ref),
-                          ],
+                  
+                  // If online, show content
+                  return homeSectionsAsync.when(
+                    data: (sections) {
+                      if (sections.isEmpty) {
+                         if (isOffline) {
+                            return SliverFillRemaining(
+                              child: _buildOfflineUI(context, theme),
+                            );
+                         }
+                        return SliverFillRemaining(
+                          child: Center(child: Text("No content found", style: TextStyle(color: theme.colorScheme.onSurface))),
                         );
-                      },
-                      childCount: sections.length,
+                      }
+                      return SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final section = sections[index];
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (section.title == "Speed dial") ...[
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                                    child: Text(
+                                      "Recents",
+                                      style: theme.textTheme.headlineSmall?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: theme.colorScheme.onSurface,
+                                      ),
+                                    ),
+                                  ),
+                                  _buildQuickDialGrid(context, section.items, ref),
+                                ] else ...[
+                                  if (index > 0) ...[
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            section.title,
+                                            style: theme.textTheme.headlineSmall?.copyWith(
+                                              fontWeight: FontWeight.bold,
+                                              color: theme.colorScheme.onSurface,
+                                            ),
+                                          ),
+                                          TextButton(
+                                            onPressed: () {
+                                              Navigator.of(context).push(
+                                                MaterialPageRoute(
+                                                  builder: (_) => SectionViewScreen(
+                                                    title: section.title,
+                                                    items: section.items,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                            child: Text(
+                                              "See all",
+                                              style: TextStyle(
+                                                color: theme.colorScheme.primary,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                  _buildHorizontalList(context, section.items, ref),
+                                ],
+                              ],
+                            );
+                          },
+                          childCount: sections.length,
+                        ),
+                      );
+                    },
+                    loading: () => SliverFillRemaining(
+                      child: Center(child: CircularProgressIndicator(color: theme.colorScheme.onSurface)),
                     ),
+                    error: (err, stack) {
+                      // If error and offline, show offline UI
+                      if (isOffline) {
+                         return SliverFillRemaining(
+                            child: _buildOfflineUI(context, theme),
+                         );
+                      }
+                      return SliverFillRemaining(
+                        child: Center(child: Text("Error: $err", style: TextStyle(color: theme.colorScheme.onSurface))),
+                      );
+                    },
                   );
                 },
                 loading: () => SliverFillRemaining(
-                  child: Center(child: CircularProgressIndicator(color: theme.colorScheme.onSurface)),
+                   child: Center(child: CircularProgressIndicator(color: theme.colorScheme.onSurface)),
                 ),
-                error: (err, stack) => SliverFillRemaining(
-                  child: Center(child: Text("Error: $err", style: TextStyle(color: theme.colorScheme.onSurface))),
+                error: (error, stack) => SliverFillRemaining(
+                   // If connectivity check fails, assume offline? Or just show error.
+                   child: _buildOfflineUI(context, theme),
                 ),
               ),
+
               // Add padding at bottom for MiniPlayer
               const SliverPadding(padding: EdgeInsets.only(bottom: 80)),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+
+
+  Widget _buildOfflineUI(BuildContext context, ThemeData theme) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.wifi_off, size: 64, color: theme.colorScheme.onSurface.withOpacity(0.5)),
+          const SizedBox(height: 16),
+          Text(
+            "Network not available",
+            style: theme.textTheme.titleLarge?.copyWith(color: theme.colorScheme.onSurface),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: () {
+              // Navigate to Downloads tab
+              final mainScreenState = context.findAncestorStateOfType<MainScreenState>();
+              if (mainScreenState != null) {
+                 mainScreenState.switchToDownloads();
+              } else {
+                 // Fallback: Just print or show toast
+                 print("Could not find MainScreenState");
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.yellow,
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            child: const Text("Explore Downloads"),
+          ),
+        ],
       ),
     );
   }
@@ -117,40 +233,61 @@ class HomeScreen extends ConsumerWidget {
         physics: const NeverScrollableScrollPhysics(),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 0.8,
+          crossAxisSpacing: 10, // Reduced spacing slightly
+          mainAxisSpacing: 10,
+          childAspectRatio: 1.0, // Square tiles
         ),
         itemCount: displayItems.length,
         itemBuilder: (context, index) {
           final item = displayItems[index];
           return GestureDetector(
             onTap: () => _playItem(context, ref, displayItems, index),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                      image: item.thumbnailUrl.isNotEmpty
-                          ? DecorationImage(
-                              image: NetworkImage(item.thumbnailUrl),
-                              fit: BoxFit.cover,
-                            )
-                          : null,
-                      color: Colors.grey[800],
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                image: item.thumbnailUrl.isNotEmpty
+                    ? DecorationImage(
+                        image: NetworkImage(item.thumbnailUrl),
+                        fit: BoxFit.cover,
+                      )
+                    : null,
+                color: Colors.grey[800],
+              ),
+              child: Stack(
+                children: [
+                  if (item.thumbnailUrl.isEmpty)
+                    const Center(child: Icon(Icons.music_note, color: Colors.white)),
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(8)),
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withOpacity(0.8),
+                          ],
+                        ),
+                      ),
+                      padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
+                      child: Text(
+                        item.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  item.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                ),
-              ],
+                ],
+              ),
             ),
           );
         },
@@ -177,14 +314,23 @@ class HomeScreen extends ConsumerWidget {
            // Fallback (shouldn't happen)
            final item = items[index];
            final repository = ref.read(musicRepositoryProvider);
-           final url = await repository.getStreamUrl(item.title, item.subtitle);
+           final url = await repository.getStreamUrl(item.title, item.subtitle, videoId: item.videoId);
            final song = songs[index];
            await audioHandler.playSong(song, url);
         }
         
         if (context.mounted) {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const PlayerScreen()),
+          Navigator.of(context, rootNavigator: true).push(
+            PageRouteBuilder(
+              pageBuilder: (context, animation, secondaryAnimation) => const PlayerScreen(),
+              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                const begin = Offset(0.0, 1.0);
+                const end = Offset.zero;
+                const curve = Curves.easeInOut;
+                var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+                return SlideTransition(position: animation.drive(tween), child: child);
+              },
+            ),
           );
         }
       } catch (e) {

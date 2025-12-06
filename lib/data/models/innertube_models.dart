@@ -52,6 +52,18 @@ class HomeSection {
   final List<MusicItem> items;
 
   HomeSection({required this.title, required this.items});
+
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    'items': items.map((i) => i.toJson()).toList(),
+  };
+
+  factory HomeSection.fromJson(Map<String, dynamic> json) {
+    return HomeSection(
+      title: json['title'],
+      items: (json['items'] as List).map((i) => MusicItem.fromJson(i)).toList(),
+    );
+  }
 }
 
 class MusicItem {
@@ -66,4 +78,20 @@ class MusicItem {
     required this.subtitle,
     required this.thumbnailUrl,
   });
+
+  Map<String, dynamic> toJson() => {
+    'videoId': videoId,
+    'title': title,
+    'subtitle': subtitle,
+    'thumbnailUrl': thumbnailUrl,
+  };
+
+  factory MusicItem.fromJson(Map<String, dynamic> json) {
+    return MusicItem(
+      videoId: json['videoId'] ?? "",
+      title: json['title'] ?? "",
+      subtitle: json['subtitle'] ?? "",
+      thumbnailUrl: json['thumbnailUrl'] ?? "",
+    );
+  }
 }

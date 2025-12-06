@@ -6,6 +6,8 @@ import 'package:mixify/data/models/playlist_model.dart';
 import 'package:mixify/data/providers.dart';
 import 'package:mixify/data/repository/playlist_repository.dart';
 import 'package:mixify/main.dart';
+import 'package:mixify/ui/screens/downloads_screen.dart';
+import 'package:mixify/ui/screens/import_playlist_screen.dart';
 import 'package:mixify/ui/screens/player_screen.dart';
 import 'package:mixify/ui/screens/playlist_detail_screen.dart';
 import 'package:spotify/spotify.dart' as spotify;
@@ -41,10 +43,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with SingleTicker
       body: SafeArea(
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
+
+            const SizedBox(height: 16),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0),
                 child: Row(
                   children: [
                     _buildTabHeader("Recent", 0, isDark, theme),
@@ -58,6 +62,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with SingleTicker
                 ),
               ),
             ),
+            const SizedBox(height: 16),
             Expanded(
               child: TabBarView(
                 controller: _tabController,
@@ -130,7 +135,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with SingleTicker
                 ),
                 onTap: () async {
                   // Play song
-                  final url = await ref.read(musicRepositoryProvider).getStreamUrl(song.title, song.artist);
+                  final url = await ref.read(musicRepositoryProvider).getStreamUrl(song.title, song.artist, videoId: song.videoId);
                   ref.read(audioHandlerProvider).playSong(song, url);
                 },
               );
@@ -395,14 +400,39 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with SingleTicker
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: ElevatedButton.icon(
-                onPressed: _showCreatePlaylistDialog,
-                icon: const Icon(Icons.add, color: AppColors.white),
-                label: const Text("Create Playlist", style: TextStyle(color: AppColors.white)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.black,
-                  minimumSize: const Size(double.infinity, 50),
-                ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _showCreatePlaylistDialog,
+                      icon: const Icon(Icons.add, color: AppColors.white),
+                      label: const Text("Create", style: TextStyle(color: AppColors.white)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.black,
+                        minimumSize: const Size(double.infinity, 50),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const ImportPlaylistScreen()),
+                        );
+                      },
+                      icon: const Icon(Icons.download, color: AppColors.black),
+                      label: const Text("Import", style: TextStyle(color: AppColors.black)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.yellow,
+                        minimumSize: const Size(double.infinity, 50),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 20),
@@ -709,7 +739,7 @@ class _ArtistDetailViewState extends ConsumerState<_ArtistDetailView> {
                       subtitle: Text(song.artist, maxLines: 1, overflow: TextOverflow.ellipsis),
                       onTap: () async {
                         // Play song
-                        final url = await ref.read(musicRepositoryProvider).getStreamUrl(song.title, song.artist);
+                        final url = await ref.read(musicRepositoryProvider).getStreamUrl(song.title, song.artist, videoId: song.videoId);
                         ref.read(audioHandlerProvider).playSong(song, url);
                       },
                     );

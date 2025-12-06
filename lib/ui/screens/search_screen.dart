@@ -79,11 +79,22 @@ class _SearchScreenState extends ConsumerState<SearchScreen> with SingleTickerPr
 
   Future<void> _playSong(Song song) async {
     try {
-      final url = await ref.read(musicRepositoryProvider).getStreamUrl(song.title, song.artist);
+      final url = await ref.read(musicRepositoryProvider).getStreamUrl(song.title, song.artist, videoId: song.videoId);
       await ref.read(audioHandlerProvider).playSong(song, url);
       
       if (mounted) {
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PlayerScreen()));
+        Navigator.of(context, rootNavigator: true).push(
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) => const PlayerScreen(),
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              const begin = Offset(0.0, 1.0);
+              const end = Offset.zero;
+              const curve = Curves.easeInOut;
+              var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+              return SlideTransition(position: animation.drive(tween), child: child);
+            },
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {

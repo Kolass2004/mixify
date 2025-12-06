@@ -10,6 +10,7 @@ import 'package:mixify/data/network/spotify_api_service.dart';
 import 'package:mixify/data/network/youtube_api_service.dart';
 import 'package:mixify/data/preferences/user_preferences.dart';
 import 'package:mixify/data/providers.dart';
+import 'package:mixify/data/repository/download_repository.dart';
 import 'package:mixify/data/repository/music_repository.dart';
 import 'package:mixify/data/repository/playlist_repository.dart';
 import 'package:mixify/player/mixify_audio_handler.dart';
@@ -30,19 +31,23 @@ void main() async {
   // Initialize Hive
   await Hive.initFlutter();
   await Hive.openBox('settings');
+  final cacheBox = await Hive.openBox('cache'); // Open cache box
   final userPrefs = UserPreferences();
   await userPrefs.init();
 
   final playlistRepo = PlaylistRepository();
   await playlistRepo.init();
 
+  final downloadRepo = DownloadRepository();
+  await downloadRepo.init();
+
   final dio = Dio();
   final youtubeApiService = YouTubeApiService();
   final spotifyApiService = SpotifyApiService();
-  final musicRepository = MusicRepository(youtubeApiService, spotifyApiService, userPrefs);
+  final musicRepository = MusicRepository(youtubeApiService, spotifyApiService, userPrefs, cacheBox);
 
   final audioHandler = await AudioService.init(
-    builder: () => MixifyAudioHandler(userPrefs, musicRepository),
+    builder: () => MixifyAudioHandler(userPrefs, musicRepository, downloadRepo),
     config: const AudioServiceConfig(
       androidNotificationChannelId: 'com.uvitetech.mixifymusic.channel.audio',
       androidNotificationChannelName: 'Mixify Music',
@@ -58,6 +63,7 @@ void main() async {
         playlistRepositoryProvider.overrideWithValue(playlistRepo),
         musicRepositoryProvider.overrideWithValue(musicRepository),
         audioHandlerProvider.overrideWithValue(audioHandler),
+        downloadRepositoryProvider.overrideWithValue(downloadRepo),
       ],
       child: MixifyApp(isFirstLaunch: userPrefs.isFirstLaunch),
     ),
@@ -127,7 +133,7 @@ class MixifyApp extends ConsumerWidget {
               },
             ),
           ),
-          home: user == null ? const OnboardingScreen() : const MainScreen(),
+          home: user == null ? OnboardingScreen() : MainScreen(),
         );
       }
     );

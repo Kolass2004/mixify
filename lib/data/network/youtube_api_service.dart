@@ -16,9 +16,9 @@ class YouTubeApiService {
           },
         ));
 
-  Future<Map<String, dynamic>> search(String query, {String hl = "en", String gl = "US"}) async {
+  Future<Map<String, dynamic>> search(String query, {String hl = "en", String gl = "US", String? params}) async {
     try {
-      final body = InnerTubeBody(query: query, hl: hl, gl: gl);
+      final body = InnerTubeBody(query: query, hl: hl, gl: gl, params: params);
       final response = await _dio.post('search', data: body.toJson());
       return response.data;
     } catch (e) {
@@ -48,6 +48,17 @@ class YouTubeApiService {
       return response.data;
     } catch (e) {
       throw Exception('Failed to get browse data: $e');
+    }
+  }
+  Future<Map<String, dynamic>> getPlaylist(String playlistId) async {
+    try {
+      // Ensure playlist ID starts with VL for browse endpoint if it's not a direct browse ID
+      final browseId = playlistId.startsWith("VL") ? playlistId : "VL$playlistId";
+      final body = InnerTubeBody(browseId: browseId);
+      final response = await _dio.post('browse', data: body.toJson());
+      return response.data;
+    } catch (e) {
+      throw Exception('Failed to get playlist: $e');
     }
   }
 }

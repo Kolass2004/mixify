@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:mixify/data/models/innertube_models.dart';
 import 'package:mixify/data/preferences/user_preferences.dart';
+import 'package:mixify/data/repository/download_repository.dart';
 import 'package:mixify/data/repository/music_repository.dart';
 import 'package:uuid/uuid.dart';
 
@@ -10,8 +12,9 @@ class MixifyAudioHandler extends BaseAudioHandler {
   final _playlist = ConcatenatingAudioSource(children: []);
   final UserPreferences _prefs;
   final MusicRepository _musicRepository;
+  final DownloadRepository _downloadRepository;
 
-  MixifyAudioHandler(this._prefs, this._musicRepository) {
+  MixifyAudioHandler(this._prefs, this._musicRepository, this._downloadRepository) {
     _loadEmptyPlaylist();
     _notifyAudioHandlerAboutPlaybackEvents();
     _listenToPlaybackState();
@@ -163,6 +166,15 @@ class MixifyAudioHandler extends BaseAudioHandler {
 
   // Play a single song (legacy support, clears queue)
   Future<void> playSong(Song song, String url) async {
+    // Check if already playing this song
+    if (mediaItem.value != null) {
+      final current = mediaItem.value!;
+      if ((song.videoId.isNotEmpty && song.videoId == current.id) || 
+          (song.title == current.title && song.artist == current.artist)) {
+        return;
+      }
+    }
+
     final item = MediaItem(
       id: song.videoId.isNotEmpty ? song.videoId : const Uuid().v4(),
       album: "YouTube Music",
@@ -189,6 +201,16 @@ class MixifyAudioHandler extends BaseAudioHandler {
 
   // Play a list of songs, starting at index
   Future<void> playList(List<Song> songs, int index) async {
+    // Check if already playing this song
+    if (mediaItem.value != null && index >= 0 && index < songs.length) {
+      final song = songs[index];
+      final current = mediaItem.value!;
+      if ((song.videoId.isNotEmpty && song.videoId == current.id) || 
+          (song.title == current.title && song.artist == current.artist)) {
+        return;
+      }
+    }
+
     // Convert Songs to MediaItems
     final items = songs.map((s) => MediaItem(
       id: s.videoId.isNotEmpty ? s.videoId : const Uuid().v4(),
@@ -201,6 +223,9 @@ class MixifyAudioHandler extends BaseAudioHandler {
 
     // Update Queue
     queue.add(items);
+    
+    // Set Loop Mode to all by default for playlists (as requested)
+    await _player.setLoopMode(LoopMode.all);
     
     // Play the selected item
     await _skipToindex(index);
@@ -218,10 +243,34 @@ class MixifyAudioHandler extends BaseAudioHandler {
       // Check if we already have the URL
       String? url = item.extras?['url'];
       
+      // Check for offline file first
+      if (url == null) {
+        final downloadedSong = _downloadRepository.getDownloadedSong(item.id);
+        if (downloadedSong != null && downloadedSong['localPath'] != null) {
+           final file = File(downloadedSong['localPath']);
+           if (await file.exists()) {
+             url = file.path;
+             print("Playing from offline file: $url");
+           }
+        }
+      }
+      
       if (url == null) {
         // Fetch URL using MusicRepository
         try {
-           url = await _musicRepository.getStreamUrl(item.title, item.artist ?? "");
+           // Use item.id as videoId if it looks like a YouTube ID (usually 11 chars)
+           // But our getStreamUrl handles fallback, so just pass it.
+           // Note: item.id might be a UUID for local files or Spotify IDs.
+           // If it's a Spotify ID (22 chars), direct YouTube playback will fail and it will fallback to search, which is correct.
+           // If it's a YouTube ID (11 chars), it will play directly.
+           
+           String? videoId = item.id;
+           // Simple check to avoid passing UUIDs (which are 36 chars) as video IDs to YouTube API
+           if (videoId.length > 20 && videoId.contains('-')) {
+             videoId = null; 
+           }
+           
+           url = await _musicRepository.getStreamUrl(item.title, item.artist ?? "", videoId: videoId);
            
            // Check if skipped again during fetch
            if (_skipId != currentSkipId) return;
@@ -290,28 +339,14 @@ class MixifyAudioHandler extends BaseAudioHandler {
     final currentQueue = queue.value;
     if (currentItem == null || currentQueue.isEmpty) return;
 
-    int currentIndex = currentQueue.indexOf(currentItem);
-    
-    // Fallback: match by ID if object equality fails
-    if (currentIndex == -1) {
-      currentIndex = currentQueue.indexWhere((item) => item.id == currentItem.id);
-    }
+    // Robust index finding: Match by ID first, then Title+Artist
+    int currentIndex = currentQueue.indexWhere((item) => item.id == currentItem.id);
 
-    // Second Fallback: match by Title and Artist (if IDs are empty or broken)
     if (currentIndex == -1) {
        currentIndex = currentQueue.indexWhere((item) => item.title == currentItem.title && item.artist == currentItem.artist);
     }
     
     print("PlayNext: Current Index: $currentIndex, Queue Length: ${currentQueue.length}");
-    if (currentIndex != -1) {
-       print("Current Item ID: ${currentItem.id}");
-       print("Queue Item ID at Index: ${currentQueue[currentIndex].id}");
-    } else {
-       print("Current Item ID: ${currentItem.id} NOT FOUND in Queue");
-       if (currentQueue.isNotEmpty) {
-          print("First Queue Item ID: ${currentQueue.first.id}");
-       }
-    }
 
     // Handle Repeat Modes
     if (_player.loopMode == LoopMode.one) {
@@ -325,8 +360,19 @@ class MixifyAudioHandler extends BaseAudioHandler {
     } else if (_player.loopMode == LoopMode.all) {
       await _skipToindex(0); // Loop back to start
     } else {
-      // Auto-play / Radio Feature
-      print("End of queue, fetching recommendations...");
+      // Auto-play / Radio Feature - DISABLED as per user request (prefer looping)
+      // print("End of queue, fetching recommendations...");
+      
+      // If we are here, it means LoopMode is OFF or ONE (but ONE is handled above).
+      // So LoopMode is OFF.
+      // Standard behavior is to STOP.
+      // But user complained about "random songs", so we definitely stop auto-play.
+      // If they want to "start over", they should use LoopMode.all (which we set by default).
+      // If they manually turned off loop, we should probably just stop.
+      
+      await stop();
+      
+      /* 
       try {
         final song = Song(
           videoId: currentItem.id,
@@ -347,7 +393,7 @@ class MixifyAudioHandler extends BaseAudioHandler {
             extras: {'url': null},
           )).toList();
           
-          final newQueue = [...currentQueue, ...newItems];
+          final List<MediaItem> newQueue = [...currentQueue, ...newItems];
           queue.add(newQueue);
           
           // Play next (which is the first of new items)
@@ -356,6 +402,7 @@ class MixifyAudioHandler extends BaseAudioHandler {
       } catch (e) {
         print("Error fetching recommendations for auto-play: $e");
       }
+      */
     }
   }
   
@@ -376,7 +423,11 @@ class MixifyAudioHandler extends BaseAudioHandler {
       return;
     }
     
-    final currentIndex = currentQueue.indexOf(currentItem);
+    int currentIndex = currentQueue.indexWhere((item) => item.id == currentItem.id);
+    if (currentIndex == -1) {
+       currentIndex = currentQueue.indexWhere((item) => item.title == currentItem.title && item.artist == currentItem.artist);
+    }
+
     if (currentIndex > 0) {
       await _skipToindex(currentIndex - 1);
     } else {

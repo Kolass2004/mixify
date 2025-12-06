@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mixify/data/providers.dart';
 import 'package:mixify/main.dart';
 
+import 'package:mixify/data/constants.dart';
+
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
@@ -60,13 +62,16 @@ class SettingsScreen extends ConsumerWidget {
               _buildSectionHeader("Content", textColor),
               ListTile(
                 title: Text("Region", style: TextStyle(color: textColor)),
-                subtitle: Text(region, style: TextStyle(color: textColor.withOpacity(0.6))),
+                subtitle: Text(
+                  AppConstants.countries.firstWhere((e) => e['code'] == region, orElse: () => {'name': region})['name']!, 
+                  style: TextStyle(color: textColor.withOpacity(0.6))
+                ),
                 trailing: DropdownButton<String>(
-                  value: region,
+                  value: AppConstants.countries.any((e) => e['code'] == region) ? region : null,
                   dropdownColor: bgColor,
                   style: TextStyle(color: textColor),
                   underline: Container(),
-                  items: ["US", "IN", "GB", "JP"].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                  items: AppConstants.countries.map((e) => DropdownMenuItem(value: e['code'], child: Text(e['name']!))).toList(),
                   onChanged: (val) {
                     if (val != null) prefs.setRegion(val);
                   },
@@ -74,13 +79,16 @@ class SettingsScreen extends ConsumerWidget {
               ),
               ListTile(
                 title: Text("Music Language", style: TextStyle(color: textColor)),
-                subtitle: Text(language, style: TextStyle(color: textColor.withOpacity(0.6))),
+                subtitle: Text(
+                  AppConstants.languages.firstWhere((e) => e['code'] == language, orElse: () => {'name': language})['name']!, 
+                  style: TextStyle(color: textColor.withOpacity(0.6))
+                ),
                 trailing: DropdownButton<String>(
-                  value: language,
+                  value: AppConstants.languages.any((e) => e['code'] == language) ? language : null,
                   dropdownColor: bgColor,
                   style: TextStyle(color: textColor),
                   underline: Container(),
-                  items: ["en", "ta", "hi", "es"].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                  items: AppConstants.languages.map((e) => DropdownMenuItem(value: e['code'], child: Text(e['name']!))).toList(),
                   onChanged: (val) {
                     if (val != null) prefs.setLanguage(val);
                   },

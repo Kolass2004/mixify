@@ -114,6 +114,4 @@ class PlaylistRepository {
   }
 }
 
-final playlistRepositoryProvider = Provider<PlaylistRepository>((ref) {
-  return PlaylistRepository();
-});
+

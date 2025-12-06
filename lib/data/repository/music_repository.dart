@@ -1,3 +1,5 @@
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:mixify/data/models/imported_playlist.dart';
 import 'package:mixify/data/models/innertube_models.dart';
 import 'package:mixify/data/network/spotify_api_service.dart';
 import 'package:mixify/data/network/youtube_api_service.dart';
@@ -8,8 +10,9 @@ class MusicRepository {
   final YouTubeApiService _youtubeApiService;
   final SpotifyApiService _spotifyApiService;
   final UserPreferences _userPreferences;
+  final Box _cacheBox;
 
-  MusicRepository(this._youtubeApiService, this._spotifyApiService, this._userPreferences);
+  MusicRepository(this._youtubeApiService, this._spotifyApiService, this._userPreferences, this._cacheBox);
 
   Future<List<spotify.Artist>> getTopArtists() async {
     try {
@@ -188,17 +191,57 @@ class MusicRepository {
     }
   }
 
-  Future<String> getStreamUrl(String title, String artist) async {
+  // YouTube Music "Songs" filter param
+  static const String kSongFilterParams = "EgWKAQIIAWoKEAkQCRADEAQQBQ==";
+
+  Future<String> getStreamUrl(String title, String artist, {String? videoId}) async {
     try {
-      // 1. Search YouTube for "Title Artist Audio"
-      final query = "$title $artist Audio";
-      final searchResponse = await _youtubeApiService.search(query);
+      // 1. If we have a videoId, try to get the stream directly
+      if (videoId != null && videoId.isNotEmpty) {
+        try {
+          final playerResponse = await _youtubeApiService.getPlayer(videoId);
+          return _extractStreamUrl(playerResponse);
+        } catch (e) {
+          print("Direct playback failed for $videoId, falling back to search: $e");
+          // Fallback to search if direct ID fails (e.g. if ID is from Spotify and not valid on YouTube)
+        }
+      }
+
+      // 2. Search YouTube with "Songs" filter first
+      // This is much more accurate for finding the official audio
+      final language = _userPreferences.language;
+      final languageName = _getLanguageName(language);
+      
+      String query = "$title $artist";
+      if (language.isNotEmpty && language != 'en') {
+         query += " $languageName";
+      }
+      
+      try {
+        final searchResponse = await _youtubeApiService.search(query, params: kSongFilterParams);
+        final songs = _parseSearchResults(searchResponse);
+        
+        if (songs.isNotEmpty) {
+           for (final song in songs.take(4)) {
+             try {
+               final playerResponse = await _youtubeApiService.getPlayer(song.videoId);
+               return _extractStreamUrl(playerResponse);
+             } catch (e) {
+               continue;
+             }
+           }
+        }
+      } catch (e) {
+        print("Filtered search failed: $e");
+      }
+
+      // 3. Fallback to general search if filtered search failed or returned no playable songs
+      final generalQuery = "$title $artist Audio";
+      final searchResponse = await _youtubeApiService.search(generalQuery);
       final songs = _parseSearchResults(searchResponse);
       
       if (songs.isEmpty) throw Exception('Song not found on YouTube');
       
-      // 2. Try to get Stream URL from the first few results
-      // Sometimes the first result is restricted or fails to load, so we try others.
       Exception? lastException;
       
       for (final song in songs.take(4)) { // Try top 4 results
@@ -218,23 +261,167 @@ class MusicRepository {
     }
   }
 
+  Future<ImportedPlaylist?> fetchPlaylistDetails(String url) async {
+    try {
+      if (url.contains("spotify.com")) {
+        // Parse Spotify URL
+        final uri = Uri.parse(url);
+        String? playlistId;
+        if (uri.pathSegments.contains('playlist')) {
+          playlistId = uri.pathSegments.last;
+        }
+        
+        if (playlistId != null) {
+          final playlist = await _spotifyApiService.getPlaylist(playlistId);
+          final tracks = await _spotifyApiService.getPlaylistTracks(playlistId);
+          
+          if (playlist != null) {
+             return ImportedPlaylist(
+               title: playlist.name ?? "Imported Playlist",
+               songs: tracks.map((t) => Song(
+                 videoId: "", // No video ID yet, will be searched on playback
+                 title: t.name ?? "",
+                 artist: t.artists?.map((a) => a.name).join(", ") ?? "",
+                 thumbnailUrl: t.album?.images?.first.url ?? "",
+               )).toList(),
+             );
+          }
+        }
+      } else if (url.contains("music.youtube.com") || url.contains("youtube.com")) {
+        // Parse YouTube URL
+        final uri = Uri.parse(url);
+        final listId = uri.queryParameters['list'];
+        
+        if (listId != null) {
+          final data = await _youtubeApiService.getPlaylist(listId);
+          
+          // Parse InnerTube Response (This is complex, simplified for now)
+          // We need to navigate the JSON to find tracks.
+          // Usually: contents -> twoColumnBrowseResultsRenderer -> tabs -> tabRenderer -> content -> sectionListRenderer -> contents -> musicPlaylistShelfRenderer -> contents
+          
+          try {
+             final tabs = data['contents']?['twoColumnBrowseResultsRenderer']?['tabs'] as List?;
+             final tab = tabs?.firstWhere((t) => t['tabRenderer']?['selected'] == true);
+             final content = tab?['tabRenderer']?['content']?['sectionListRenderer']?['contents']?.first;
+             final playlistShelf = content?['musicPlaylistShelfRenderer'];
+             
+             final title = data['header']?['musicDetailHeaderRenderer']?['title']?['runs']?.first?['text'] ?? "Imported Playlist";
+             
+             final items = playlistShelf?['contents'] as List?;
+             if (items != null) {
+               final songs = <Song>[];
+               for (final item in items) {
+                 final mrl = item['musicResponsiveListItemRenderer'];
+                 if (mrl != null) {
+                   final title = mrl['flexColumns']?[0]?['musicResponsiveListItemFlexColumnRenderer']?['text']?['runs']?[0]?['text'];
+                   final artist = mrl['flexColumns']?[1]?['musicResponsiveListItemFlexColumnRenderer']?['text']?['runs']?[0]?['text'];
+                   final videoId = mrl['playlistItemData']?['videoId'];
+                   final thumbnail = mrl['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails']?.last?['url'];
+                   
+                   if (title != null && videoId != null) {
+                     songs.add(Song(
+                       videoId: videoId,
+                       title: title,
+                       artist: artist ?? "Unknown",
+                       thumbnailUrl: thumbnail ?? "",
+                     ));
+                   }
+                 }
+               }
+               return ImportedPlaylist(title: title, songs: songs);
+             }
+          } catch (e) {
+            print("Error parsing YouTube playlist: $e");
+          }
+        }
+      }
+    } catch (e) {
+      print("Error fetching playlist details: $e");
+    }
+    return null;
+  }
+
+  Future<void> clearHomeCache() async {
+    await _cacheBox.delete('home_sections');
+    await _cacheBox.delete('home_sections_timestamp');
+  }
+
   Future<List<HomeSection>> getHomeSections() async {
+    // 1. Check Cache
+    try {
+      final timestamp = _cacheBox.get('home_sections_timestamp');
+      if (timestamp != null) {
+        final difference = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(timestamp));
+        // Cache valid for 1 hour
+        if (difference.inHours < 1) {
+           final cachedData = _cacheBox.get('home_sections');
+           if (cachedData != null) {
+             print("Loading Home Sections from Cache");
+             final List<dynamic> decoded = cachedData;
+             return decoded.map((e) => HomeSection.fromJson(Map<String, dynamic>.from(e))).toList();
+           }
+        }
+      }
+    } catch (e) {
+      print("Error reading cache: $e");
+    }
+
     final List<HomeSection> sections = [];
     final language = _userPreferences.language;
     final languageName = _getLanguageName(language);
 
     try {
-      // 0. Quick Dial (Recently Played)
+      // 0. Quick Dial (Recently Played + Suggestions to fill 9 tiles)
       final history = _userPreferences.getSongHistory();
-      if (history.isNotEmpty) {
+      List<MusicItem> quickDialItems = history.map((s) => MusicItem(
+        videoId: s['id'] ?? "",
+        title: s['title'] ?? "",
+        subtitle: s['artist'] ?? "",
+        thumbnailUrl: s['artUri'] ?? "",
+      )).toList();
+
+      // If less than 9, fill with language specific hits
+      if (quickDialItems.length < 9) {
+        try {
+          final needed = 9 - quickDialItems.length;
+          // Try to get language hits first
+          var fillTracks = <spotify.Track>[];
+          if (language.isNotEmpty && language != 'en') {
+             fillTracks = await _spotifyApiService.getLanguageHits(languageName);
+          }
+          
+          // If still not enough or no language, try global
+          if (fillTracks.isEmpty) {
+             fillTracks = await _spotifyApiService.getTopTracks();
+          }
+          
+          // Take what we need
+          final fillItems = _mapSpotifyTracksToMusicItems(fillTracks.take(needed).toList());
+          
+          // Filter duplicates (simple check by ID)
+          final existingIds = quickDialItems.map((i) => i.videoId).toSet();
+          for (final item in fillItems) {
+            if (!existingIds.contains(item.videoId)) {
+              quickDialItems.add(item);
+            }
+          }
+          
+          // If still < 9 (e.g. duplicates removed), we might need more, but for now let's accept it might be slightly less 
+          // or we could fetch more. But this is a good start.
+        } catch (e) {
+          print("Error filling Quick Dial: $e");
+        }
+      }
+      
+      // Limit to 9 if we have more (history could be long)
+      if (quickDialItems.length > 9) {
+        quickDialItems = quickDialItems.take(9).toList();
+      }
+
+      if (quickDialItems.isNotEmpty) {
         sections.add(HomeSection(
-          title: "Quick Dial",
-          items: history.map((s) => MusicItem(
-            videoId: s['id'] ?? "",
-            title: s['title'] ?? "",
-            subtitle: s['artist'] ?? "",
-            thumbnailUrl: s['artUri'] ?? "",
-          )).toList(),
+          title: "Speed dial", // Renamed from Quick Dial as per user request
+          items: quickDialItems,
         ));
       }
 
@@ -362,9 +549,30 @@ class MusicRepository {
         print("Trending videos fetch failed: $e");
       }
 
+      // Save to Cache
+      if (sections.isNotEmpty) {
+        try {
+           final encoded = sections.map((s) => s.toJson()).toList();
+           await _cacheBox.put('home_sections', encoded);
+           await _cacheBox.put('home_sections_timestamp', DateTime.now().millisecondsSinceEpoch);
+        } catch (e) {
+           print("Error saving to cache: $e");
+        }
+      }
+
       return sections;
     } catch (e) {
       print("Error fetching home sections: $e");
+      // Try to return stale cache if fetch fails
+      try {
+         final cachedData = _cacheBox.get('home_sections');
+         if (cachedData != null) {
+           print("Returning stale cache due to error");
+           final List<dynamic> decoded = cachedData;
+           return decoded.map((e) => HomeSection.fromJson(Map<String, dynamic>.from(e))).toList();
+         }
+      } catch (_) {}
+      
       return [];
     }
   }

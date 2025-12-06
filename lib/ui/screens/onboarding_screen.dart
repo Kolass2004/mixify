@@ -8,6 +8,8 @@ import 'package:mixify/ui/screens/main_screen.dart';
 import 'package:mixify/data/services/auth_service.dart';
 import 'package:mixify/data/services/firestore_service.dart';
 
+import 'package:mixify/data/constants.dart';
+
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -25,23 +27,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   String _selectedRegion = 'US';
   String _selectedLanguage = 'en';
 
-  final List<Map<String, String>> _regions = [
-    {'code': 'US', 'name': 'United States'},
-    {'code': 'IN', 'name': 'India'},
-    {'code': 'GB', 'name': 'United Kingdom'},
-    {'code': 'JP', 'name': 'Japan'},
-  ];
-
-  final List<Map<String, String>> _languages = [
-    {'code': 'en', 'name': 'English'},
-    {'code': 'hi', 'name': 'Hindi'},
-    {'code': 'ta', 'name': 'Tamil'},
-    {'code': 'ml', 'name': 'Malayalam'},
-    {'code': 'kn', 'name': 'Kannada'},
-    {'code': 'te', 'name': 'Telugu'},
-    {'code': 'es', 'name': 'Spanish'},
-    {'code': 'ja', 'name': 'Japanese'},
-  ];
+  final List<Map<String, String>> _regions = AppConstants.countries;
+  final List<Map<String, String>> _languages = AppConstants.languages;
 
   @override
   Widget build(BuildContext context) {

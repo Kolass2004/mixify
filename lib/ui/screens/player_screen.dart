@@ -1,5 +1,9 @@
+import 'dart:io';
 import 'dart:math';
 import 'dart:ui';
+
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -176,6 +180,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with SingleTickerPr
                             ),
                           ),
                           IconButton(
+                            icon: const Icon(Icons.download_for_offline_outlined, color: Colors.white, size: 30),
+                            onPressed: () => _downloadSong(context, mediaItem),
+                          ),
+                          IconButton(
                             icon: const Icon(Icons.playlist_add, color: Colors.white, size: 30),
                             onPressed: () => _showAddToPlaylistDialog(context, mediaItem),
                           ),
@@ -309,6 +317,97 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with SingleTickerPr
         );
       },
     );
+  }
+
+
+
+  Future<void> _downloadSong(BuildContext context, MediaItem mediaItem) async {
+    // Check permission first
+    PermissionStatus status;
+    if (Platform.isAndroid) {
+      final androidInfo = await DeviceInfoPlugin().androidInfo;
+      if (androidInfo.version.sdkInt >= 33) {
+        status = await Permission.audio.request();
+      } else {
+        status = await Permission.storage.request();
+      }
+    } else {
+      status = await Permission.storage.request();
+    }
+
+    if (status.isPermanentlyDenied) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text("Permission Required"),
+            content: const Text("Storage permission is required to download songs. Please enable it in settings."),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Cancel"),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  openAppSettings();
+                },
+                child: const Text("Open Settings"),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
+    if (!status.isGranted) {
+      if (mounted) {
+         ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Storage permission required for downloads.")),
+        );
+      }
+      return;
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Downloading song...")),
+      );
+    }
+
+    try {
+      final downloadRepo = ref.read(downloadRepositoryProvider);
+      final musicRepo = ref.read(musicRepositoryProvider);
+      
+      // We need the stream URL. 
+      // Note: mediaItem.id is usually the videoId in this app's context
+      final url = await musicRepo.getStreamUrl(mediaItem.title, mediaItem.artist ?? "", videoId: mediaItem.id);
+      
+      await downloadRepo.downloadSongWithUrl(
+        {
+          'id': mediaItem.id,
+          'title': mediaItem.title,
+          'artist': mediaItem.artist ?? "Unknown",
+          'thumbnailUrl': mediaItem.artUri.toString(),
+          'album': mediaItem.album ?? "Unknown Album",
+        },
+        url
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Downloaded ${mediaItem.title}")),
+        );
+      }
+    } catch (e) {
+      print("Download failed: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Failed to download song")),
+        );
+      }
+    }
   }
 
   void _showAddToPlaylistDialog(BuildContext context, MediaItem mediaItem) {

@@ -30,7 +30,8 @@ class SpotifyApiService {
       final playlistId = search.first.items!.first.id!;
       // Use .first() to get the first page of tracks (usually 50) instead of .all()
       // This avoids potential paging errors and is faster
-      final tracksPage = await _spotify.playlists.getTracksByPlaylistId(playlistId).first();
+      // Use .first(50) to get 50 tracks
+      final tracksPage = await _spotify.playlists.getTracksByPlaylistId(playlistId).first(50);
       return tracksPage.items?.toList() ?? [];
     } catch (e) {
       print('Error fetching top tracks for market $market: $e');
@@ -47,7 +48,7 @@ class SpotifyApiService {
       }
       
       final playlistId = search.first.items!.first.id!;
-      final tracksPage = await _spotify.playlists.getTracksByPlaylistId(playlistId).first();
+      final tracksPage = await _spotify.playlists.getTracksByPlaylistId(playlistId).first(50);
       return tracksPage.items?.toList() ?? [];
     } catch (e) {
       print('Error fetching $language hits: $e');
@@ -65,7 +66,7 @@ class SpotifyApiService {
       }
       
       final playlistId = search.first.items!.first.id!;
-      final tracksPage = await _spotify.playlists.getTracksByPlaylistId(playlistId).first();
+      final tracksPage = await _spotify.playlists.getTracksByPlaylistId(playlistId).first(50);
       return tracksPage.items?.toList() ?? [];
     } catch (e) {
       print('Error fetching new $language songs: $e');
@@ -123,6 +124,24 @@ class SpotifyApiService {
     } catch (e) {
       print('Error searching albums: $e');
       return [];
+    }
+  }
+  Future<List<Track>> getPlaylistTracks(String playlistId) async {
+    try {
+      final tracksPage = await _spotify.playlists.getTracksByPlaylistId(playlistId).first(50);
+      return tracksPage.items?.toList() ?? [];
+    } catch (e) {
+      print('Error fetching playlist tracks: $e');
+      return [];
+    }
+  }
+
+  Future<PlaylistSimple?> getPlaylist(String playlistId) async {
+    try {
+      return await _spotify.playlists.get(playlistId);
+    } catch (e) {
+      print('Error fetching playlist details: $e');
+      return null;
     }
   }
 }
