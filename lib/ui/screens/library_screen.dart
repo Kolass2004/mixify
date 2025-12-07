@@ -98,7 +98,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with SingleTicker
             setState(() {});
           },
           child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
+            padding: const EdgeInsets.only(left: 24, right: 24, bottom: 150),
             itemCount: history.length,
             itemBuilder: (context, index) {
               final songData = history[index];
@@ -190,7 +190,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with SingleTicker
         setState(() {}); // Rebuild to refresh history if needed
       },
       child: GridView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
+        padding: const EdgeInsets.only(left: 24, right: 24, bottom: 150),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
           crossAxisSpacing: 16,
@@ -327,7 +327,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with SingleTicker
                 }
             
                 return GridView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  padding: const EdgeInsets.only(left: 24, right: 24, bottom: 150),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
                     crossAxisSpacing: 16,
@@ -423,10 +423,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with SingleTicker
                           MaterialPageRoute(builder: (context) => const ImportPlaylistScreen()),
                         );
                       },
-                      icon: const Icon(Icons.download, color: AppColors.black),
-                      label: const Text("Import", style: TextStyle(color: AppColors.black)),
+                      icon: const Icon(Icons.download, color: AppColors.white),
+                      label: const Text("Import", style: TextStyle(color: AppColors.white)),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.yellow,
+                        backgroundColor: AppColors.black, // Changed to Black for visibility
                         minimumSize: const Size(double.infinity, 50),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
@@ -440,7 +440,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with SingleTicker
               child: playlists.isEmpty 
               ? const Center(child: Text("No playlists yet"))
               : ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
+                padding: const EdgeInsets.only(left: 24, right: 24, bottom: 150),
                 itemCount: playlists.length,
                 itemBuilder: (context, index) {
                   final playlist = playlists[index];
@@ -475,8 +475,27 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with SingleTicker
                     },
                     trailing: IconButton(
                       icon: const Icon(Icons.delete_outline),
-                      onPressed: () async {
-                        await playlistRepo.deletePlaylist(playlist.id);
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text("Delete Playlist"),
+                            content: Text("Are you sure you want to delete '${playlist.name}'?"),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text("Cancel", style: TextStyle(color: AppColors.black)),
+                              ),
+                              TextButton(
+                                onPressed: () async {
+                                  await playlistRepo.deletePlaylist(playlist.id);
+                                  if (context.mounted) Navigator.pop(context);
+                                },
+                                child: const Text("Delete", style: TextStyle(color: Colors.red)),
+                              ),
+                            ],
+                          ),
+                        );
                       },
                     ),
                   );

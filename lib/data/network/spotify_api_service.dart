@@ -144,4 +144,85 @@ class SpotifyApiService {
       return null;
     }
   }
+  Future<List<PlaylistSimple>> getFeaturedPlaylists() async {
+    try {
+      print('Fetching featured playlists...');
+      // Limit to 20 for speed
+      final playlists = await _spotify.playlists.featured.first(20);
+      print('Featured playlists fetched: ${playlists.items?.length}');
+      return playlists.items?.toList() ?? [];
+    } catch (e) {
+      print('Error fetching featured playlists: $e');
+      try {
+        print('Fallback: Searching for "Featured" playlists');
+        final search = await _spotify.search.get('Featured', types: [SearchType.playlist]).first();
+        return search.first.items?.toList().cast<PlaylistSimple>() ?? [];
+      } catch (e2) {
+        print('Fallback search failed for Featured: $e2');
+        return [];
+      }
+    }
+  }
+
+  Future<List<Category>> getCategories() async {
+    try {
+      print('Fetching categories...');
+      // Limit to 50 categories
+      final categories = await _spotify.categories.list(country: Market.US).first(50);
+      print('Categories fetched: ${categories.items?.length}');
+      return categories.items?.toList() ?? [];
+    } catch (e) {
+      print('Error fetching categories: $e');
+      return [];
+    }
+  }
+
+  Future<List<PlaylistSimple>> getCategoryPlaylists(String categoryId, {String? categoryName}) async {
+    try {
+      print('Fetching playlists for category: $categoryId');
+      // Limit to 50 playlists
+      // Explicitly use Market.US as categories were fetched with Market.US
+      final playlists = await _spotify.playlists.getByCategoryId(categoryId, country: Market.US).first(50);
+      return playlists.items?.toList() ?? [];
+    } catch (e) {
+      print('Error fetching category playlists for $categoryId: $e');
+      
+      if (categoryName != null) {
+        try {
+          print('Fallback: Searching playlists for category name: $categoryName');
+          final search = await _spotify.search.get(categoryName, types: [SearchType.playlist]).first();
+          return search.first.items?.toList().cast<PlaylistSimple>() ?? [];
+        } catch (e2) {
+          print('Fallback search failed for $categoryName: $e2');
+        }
+      }
+      return [];
+    }
+  }
+
+  Future<List<AlbumSimple>> getNewAlbumReleases({String? country}) async {
+    try {
+      Market? market;
+      if (country != null) {
+        switch (country.toUpperCase()) {
+          case 'IN': market = Market.IN; break;
+          case 'GB': market = Market.GB; break;
+          case 'AU': market = Market.AU; break;
+          case 'JP': market = Market.JP; break;
+          case 'DE': market = Market.DE; break;
+          case 'FR': market = Market.FR; break;
+          case 'BR': market = Market.BR; break;
+          case 'CA': market = Market.CA; break;
+          default: market = Market.US;
+        }
+      }
+      
+      // Limit to 50 new releases
+      final albums = await _spotify.browse.newReleases(country: market).first(50);
+      return albums.items?.toList() ?? [];
+    } catch (e) {
+      print('Error fetching new releases: $e');
+      return [];
+    }
+  }
 }

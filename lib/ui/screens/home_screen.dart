@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mixify/ui/screens/category_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mixify/data/models/innertube_models.dart';
 import 'package:mixify/data/providers.dart';
@@ -140,7 +141,14 @@ class HomeScreen extends ConsumerWidget {
                                       ),
                                     ),
                                   ],
-                                  _buildHorizontalList(context, section.items, ref),
+                                  if (section.type == HomeSectionType.playlists)
+                                    _buildFeaturedPlaylists(context, section.items, ref)
+                                  else if (section.type == HomeSectionType.categories)
+                                    _buildCategoryList(context, section.items, ref)
+                                  else if (section.type == HomeSectionType.albums)
+                                    _buildNewReleasesList(context, section.items, ref)
+                                  else
+                                    _buildHorizontalList(context, section.items, ref),
                                 ],
                               ],
                             );
@@ -393,6 +401,202 @@ class HomeScreen extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildFeaturedPlaylists(BuildContext context, List<MusicItem> items, WidgetRef ref) {
+    return SizedBox(
+      height: 240,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        itemCount: items.length,
+        itemBuilder: (context, index) {
+          final item = items[index];
+          return GestureDetector(
+            onTap: () {
+               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Playlist selection coming soon!")));
+            },
+            child: Container(
+              width: 280,
+              margin: const EdgeInsets.only(right: 16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                image: item.thumbnailUrl.isNotEmpty
+                    ? DecorationImage(
+                        image: NetworkImage(item.thumbnailUrl),
+                        fit: BoxFit.cover,
+                      )
+                    : null,
+                color: Colors.grey[800],
+              ),
+              child: Stack(
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withOpacity(0.9),
+                        ],
+                        stops: const [0.5, 1.0],
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 16,
+                    left: 16,
+                    right: 16,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          item.subtitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.8),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildCategoryList(BuildContext context, List<MusicItem> items, WidgetRef ref) {
+    return SizedBox(
+      height: 120,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        itemCount: items.length,
+        itemBuilder: (context, index) {
+          final item = items[index];
+          final color = Colors.primaries[index % Colors.primaries.length];
+          
+          return GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => CategoryScreen(
+                    categoryId: item.videoId,
+                    categoryName: item.title,
+                  ),
+                ),
+              );
+            },
+            child: Container(
+              width: 120,
+              margin: const EdgeInsets.only(right: 16),
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(12),
+                image: item.thumbnailUrl.isNotEmpty
+                    ? DecorationImage(
+                        image: NetworkImage(item.thumbnailUrl),
+                        fit: BoxFit.cover,
+                        colorFilter: ColorFilter.mode(Colors.black.withOpacity(0.3), BlendMode.darken),
+                      )
+                    : null,
+              ),
+              child: Center(
+                child: Text(
+                  item.title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    shadows: [Shadow(blurRadius: 4, color: Colors.black, offset: Offset(0, 2))],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+  Widget _buildNewReleasesList(BuildContext context, List<MusicItem> items, WidgetRef ref) {
+    return SizedBox(
+      height: 180,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        itemCount: items.length,
+        itemBuilder: (context, index) {
+          final item = items[index];
+          return GestureDetector(
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Album selection coming soon!")));
+            },
+            child: Container(
+              width: 140,
+              margin: const EdgeInsets.only(right: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    height: 140,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      image: item.thumbnailUrl.isNotEmpty
+                          ? DecorationImage(
+                              image: NetworkImage(item.thumbnailUrl),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
+                      color: Colors.grey[800],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    item.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  Text(
+                    item.subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                      fontSize: 12,
                     ),
                   ),
                 ],

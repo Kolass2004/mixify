@@ -86,12 +86,13 @@ class MainScreenState extends ConsumerState<MainScreen> {
                     _buildTabNavigator(3, const ProfileScreen()),
                   ],
                 ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: kBottomNavigationBarHeight + MediaQuery.of(context).padding.bottom, 
-                  child: const MiniPlayer(),
-                ),
+                if (MediaQuery.of(context).viewInsets.bottom == 0)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: kBottomNavigationBarHeight + MediaQuery.of(context).padding.bottom, 
+                    child: const MiniPlayer(),
+                  ),
               ],
             ),
             bottomNavigationBar: ClipRRect(

@@ -180,6 +180,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> with SingleTickerPr
                     children: [
                       // Songs Tab
                       ListView.builder(
+                        padding: const EdgeInsets.only(bottom: 150),
                         itemCount: _songs.length,
                         itemBuilder: (context, index) {
                           final song = _songs[index];
@@ -199,6 +200,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> with SingleTickerPr
                       ),
                       // Albums Tab
                       ListView.builder(
+                        padding: const EdgeInsets.only(bottom: 150),
                         itemCount: _albums.length,
                         itemBuilder: (context, index) {
                           final album = _albums[index];
@@ -226,7 +228,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> with SingleTickerPr
                     ],
                   ),
           ),
-          const MiniPlayer(),
         ],
       ),
     );

@@ -218,8 +218,27 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> with SingleTi
               ),
               trailing: IconButton(
                 icon: const Icon(Icons.delete_outline),
-                onPressed: () async {
-                   await downloadRepo.deleteSong(songData['id']);
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text("Delete Song"),
+                      content: Text("Are you sure you want to delete '${song.title}'?"),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text("Cancel", style: TextStyle(color: AppColors.black)),
+                        ),
+                        TextButton(
+                          onPressed: () async {
+                            await downloadRepo.deleteSong(songData['id']);
+                            if (context.mounted) Navigator.pop(context);
+                          },
+                          child: const Text("Delete", style: TextStyle(color: Colors.red)),
+                        ),
+                      ],
+                    ),
+                  );
                 },
               ),
               onTap: () async {
@@ -332,38 +351,79 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> with SingleTi
                   color: AppColors.black.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Stack(
                   children: [
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                        child: Image(
-                          image: imageProvider,
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                          errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.album, size: 50, color: Colors.grey)),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                            child: Image(
+                              image: imageProvider,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.album, size: 50, color: Colors.grey)),
+                            ),
+                          ),
                         ),
-                      ),
+                        Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                albumName,
+                                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                artist,
+                                style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                    Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            albumName,
-                            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            artist,
-                            style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.5),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.white, size: 20),
+                          onPressed: () {
+                            showDialog(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: const Text("Delete Album"),
+                                content: Text("Are you sure you want to delete all songs in '$albumName'?"),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: const Text("Cancel", style: TextStyle(color: AppColors.black)),
+                                  ),
+                                  TextButton(
+                                    onPressed: () async {
+                                      for (final song in songs) {
+                                        await downloadRepo.deleteSong(song['id']);
+                                      }
+                                      if (context.mounted) Navigator.pop(context);
+                                    },
+                                    child: const Text("Delete", style: TextStyle(color: Colors.red)),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
                   ],

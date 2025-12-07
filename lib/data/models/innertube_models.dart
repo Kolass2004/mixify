@@ -47,21 +47,30 @@ class Song {
   });
 }
 
+enum HomeSectionType { tracks, playlists, categories, albums }
+
 class HomeSection {
   final String title;
   final List<MusicItem> items;
+  final HomeSectionType type;
 
-  HomeSection({required this.title, required this.items});
+  HomeSection({required this.title, required this.items, this.type = HomeSectionType.tracks});
 
-  Map<String, dynamic> toJson() => {
-    'title': title,
-    'items': items.map((i) => i.toJson()).toList(),
-  };
+  Map<String, dynamic> toJson() {
+    return {
+      'title': title,
+      'items': items.map((e) => e.toJson()).toList(),
+      'type': type.toString(),
+    };
+  }
 
   factory HomeSection.fromJson(Map<String, dynamic> json) {
     return HomeSection(
       title: json['title'],
-      items: (json['items'] as List).map((i) => MusicItem.fromJson(i)).toList(),
+      items: (json['items'] as List).map((e) => MusicItem.fromJson(e)).toList(),
+      type: json['type'] != null 
+          ? HomeSectionType.values.firstWhere((e) => e.toString() == json['type'], orElse: () => HomeSectionType.tracks)
+          : HomeSectionType.tracks,
     );
   }
 }
