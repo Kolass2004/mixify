@@ -49,7 +49,7 @@ class _ImportPlaylistScreenState extends ConsumerState<ImportPlaylistScreen> {
           style: theme.textTheme.titleLarge,
         ),
       ),
-      body: _buildBody(theme, isDark),
+      body: SafeArea(child: _buildBody(theme, isDark)),
     );
   }
 
@@ -78,22 +78,44 @@ class _ImportPlaylistScreenState extends ConsumerState<ImportPlaylistScreen> {
         children: [
           Text(
             "Import from",
-            style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+            style: theme.textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: AppColors.yellow,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            "Select the platform to import your playlist from",
+            style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 40),
-          _buildSourceCard(
-            "Spotify",
-            Colors.green,
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/1/19/Spotify_logo_without_text.svg/2048px-Spotify_logo_without_text.svg.png",
-            () => _selectSource("Spotify"),
-          ),
-          const SizedBox(height: 20),
-          _buildSourceCard(
-            "YouTube Music",
-            Colors.red,
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Youtube_Music_icon.svg/2048px-Youtube_Music_icon.svg.png",
-            () => _selectSource("YouTube"),
+          Expanded(
+            child: ListView(
+              children: [
+                _buildSourceCard(
+                  "Spotify",
+                  const Color(0xFF1DB954),
+                  "https://upload.wikimedia.org/wikipedia/commons/thumb/1/19/Spotify_logo_without_text.svg/2048px-Spotify_logo_without_text.svg.png",
+                  () => _selectSource("Spotify"),
+                ),
+                const SizedBox(height: 16),
+                _buildSourceCard(
+                  "YouTube Music",
+                  const Color(0xFFFF0000),
+                  "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Youtube_Music_icon.svg/2048px-Youtube_Music_icon.svg.png",
+                  () => _selectSource("YouTube"),
+                ),
+                 const SizedBox(height: 16),
+                _buildSourceCard(
+                  "Apple Music",
+                  const Color(0xFFFC3C44),
+                  "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/Apple_Music_logo.svg/2560px-Apple_Music_logo.svg.png",
+                  () => _selectSource("Apple"),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -103,27 +125,39 @@ class _ImportPlaylistScreenState extends ConsumerState<ImportPlaylistScreen> {
   Widget _buildSourceCard(String title, Color color, String imageUrl, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(20),
       child: Container(
-        height: 100,
+        height: 80,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color, width: 2),
+          color: color.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withOpacity(0.5), width: 1.5),
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Image.network(imageUrl, width: 40, height: 40),
-            const SizedBox(width: 16),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(color: color.withOpacity(0.2), blurRadius: 8, offset: const Offset(0, 4))
+                ]
+              ),
+              child: Image.network(imageUrl, width: 30, height: 30),
+            ),
+            const SizedBox(width: 20),
             Text(
               title,
               style: TextStyle(
-                fontSize: 24,
+                fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: color,
+                color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black,
               ),
             ),
+            const Spacer(),
+            Icon(Icons.arrow_forward_ios_rounded, color: color, size: 20),
           ],
         ),
       ),
@@ -269,7 +303,7 @@ class _ImportPlaylistScreenState extends ConsumerState<ImportPlaylistScreen> {
       final playlistRepo = ref.read(playlistRepositoryProvider);
       
       // Create playlist
-      await playlistRepo.createPlaylist(_titleController.text);
+      await playlistRepo.createPlaylist(_titleController.text, source: _selectedSource);
       
       // Get the newly created playlist (it's the last one, or we can modify createPlaylist to return ID)
       // For now, let's assume we can get it or modify createPlaylist.

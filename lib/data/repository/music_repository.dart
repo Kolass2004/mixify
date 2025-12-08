@@ -5,6 +5,8 @@ import 'package:mixify/data/network/spotify_api_service.dart';
 import 'package:mixify/data/network/youtube_api_service.dart';
 import 'package:mixify/data/preferences/user_preferences.dart';
 import 'package:spotify/spotify.dart' as spotify;
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class MusicRepository {
   final YouTubeApiService _youtubeApiService;
@@ -262,73 +264,276 @@ class MusicRepository {
   }
 
   Future<ImportedPlaylist?> fetchPlaylistDetails(String url) async {
+    print("fetchPlaylistDetails called with URL: $url");
     try {
-      if (url.contains("spotify.com")) {
-        // Parse Spotify URL
-        final uri = Uri.parse(url);
-        String? playlistId;
-        if (uri.pathSegments.contains('playlist')) {
-          playlistId = uri.pathSegments.last;
-        }
-        
-        if (playlistId != null) {
-          final playlist = await _spotifyApiService.getPlaylist(playlistId);
-          final tracks = await _spotifyApiService.getPlaylistTracks(playlistId);
+      if (url.contains("music.apple.com")) {
+        print("Detected Apple Music URL");
+        // Parse Apple Music URL
+        try {
+          // Add User-Agent to avoid blocking and try to get SEO-friendly page (Googlebot)
+          final headers = {
+            'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
+          };
+          print("Fetching Apple Music page with Googlebot UA...");
+          final response = await http.get(Uri.parse(url), headers: headers);
+          print("Apple Music response status: ${response.statusCode}");
           
-          if (playlist != null) {
-             return ImportedPlaylist(
-               title: playlist.name ?? "Imported Playlist",
-               songs: tracks.map((t) => Song(
-                 videoId: "", // No video ID yet, will be searched on playback
-                 title: t.name ?? "",
-                 artist: t.artists?.map((a) => a.name).join(", ") ?? "",
-                 thumbnailUrl: t.album?.images?.first.url ?? "",
-               )).toList(),
-             );
+          if (response.statusCode == 200) {
+            final html = response.body;
+            // Strategy: Look for JSON-LD (Script block)
+            final jsonLdMatch = RegExp(r'<script type="application/ld\+json">\s*({.*?})\s*</script>', dotAll: true).firstMatch(html);
+            
+            if (jsonLdMatch != null) {
+              print("JSON-LD script block found");
+              final jsonString = jsonLdMatch.group(1);
+              if (jsonString != null) {
+                 try {
+                   final data = json.decode(jsonString);
+                   print("JSON-LD data decoded successfully");
+                   
+                   String title = "Imported Playlist";
+                   List<Song> songs = [];
+
+                   void parseTracks(List tracks) {
+                     print("Parsing ${tracks.length} tracks from JSON-LD");
+                     for (final track in tracks) {
+                       final name = track['name'];
+                       final byArtist = track['byArtist'];
+                       String artist = "Unknown Artist";
+                       if (byArtist is List) {
+                         artist = byArtist.map((a) => a['name']).join(", ");
+                       } else if (byArtist is Map) {
+                         artist = byArtist['name'] ?? "Unknown";
+                       }
+                       
+                       if (name != null) {
+                         songs.add(Song(
+                           videoId: "", 
+                           title: name, 
+                           artist: artist, 
+                           thumbnailUrl: "",
+                         ));
+                       }
+                     }
+                   }
+
+                   // Handle both direct object and graph array
+                   if (data['@type'] == 'MusicPlaylist') {
+                     title = data['name'] ?? title;
+                     final trackList = data['track'];
+                     if (trackList is List) parseTracks(trackList);
+                   } else if (data['@graph'] != null) {
+                     print("Checking @graph for MusicPlaylist");
+                     for (final item in data['@graph']) {
+                       if (item['@type'] == 'MusicPlaylist') {
+                         title = item['name'] ?? title;
+                         final trackList = item['track'];
+                         if (trackList is List) parseTracks(trackList);
+                         break;
+                       }
+                     }
+                   }
+                   
+                   if (songs.isNotEmpty) {
+                     print("Successfully imported ${songs.length} songs from Apple Music");
+                     return ImportedPlaylist(title: title, songs: songs);
+                   } else {
+                     print("No songs found in Apple Music data");
+                   }
+                 } catch (e) {
+                   print("JSON-LD parse error: $e");
+                 }
+              }
+            } else {
+               print("No JSON-LD found in Apple Music page. Trying serialized-server-data...");
+               
+               // Fallback: Parse serialized-server-data (Hydration Data)
+               final serverDataMatch = RegExp(r'<script[^>]*id="serialized-server-data"[^>]*>([^<]*)</script>').firstMatch(html);
+               if (serverDataMatch != null) {
+                 final jsonString = serverDataMatch.group(1);
+                 if (jsonString != null) {
+                   try {
+                     final decoded = json.decode(jsonString);
+                     List<Song> songs = [];
+                     String title = "Imported Playlist";
+                     
+                     // Try to get title from OG tag first as it's reliable
+                     final ogTitleMatch = RegExp(r'<meta property="og:title" content="(.*?)"').firstMatch(html);
+                     if (ogTitleMatch != null) {
+                       title = ogTitleMatch.group(1) ?? title;
+                       // Clean up " - Apple Music" suffix
+                       title = title.replaceAll(" - Apple Music", "").trim();
+                     }
+
+                     if (decoded is List) {
+                       for (var item in decoded) {
+                         if (item['data']?['sections'] != null) {
+                           final sections = item['data']['sections'];
+                           if (sections is List) {
+                             for (var section in sections) {
+                               if (section['items'] is List) {
+                                 for (var trackItem in section['items']) {
+                                   // Look for trackLockup or explicit song kind
+                                   if (trackItem['itemKind'] == 'trackLockup' || 
+                                       trackItem['contentDescriptor']?['kind'] == 'song') {
+                                     
+                                     final songTitle = trackItem['title'];
+                                     final artist = trackItem['artistName'] ?? trackItem['subtitleLinks']?[0]?['title'] ?? "Unknown Artist";
+                                     String? artworkUrl = trackItem['artwork']?['dictionary']?['url'];
+                                     
+                                     if (artworkUrl != null) {
+                                       artworkUrl = artworkUrl.replaceAll("{w}", "600").replaceAll("{h}", "600").replaceAll("{f}", "jpg");
+                                     }
+                                     
+                                     if (songTitle != null) {
+                                       songs.add(Song(
+                                         videoId: "", // Search will handle this
+                                         title: songTitle,
+                                         artist: artist,
+                                         thumbnailUrl: artworkUrl ?? "",
+                                       ));
+                                     }
+                                   }
+                                 }
+                               }
+                             }
+                           }
+                         }
+                       }
+                     }
+                     
+                     if (songs.isNotEmpty) {
+                       print("Successfully imported ${songs.length} songs from Apple Music (Server Data)");
+                       return ImportedPlaylist(title: title, songs: songs);
+                     } else {
+                        print("No songs found in serialized-server-data");
+                     }
+                   } catch (e) {
+                     print("Error parsing serialized-server-data: $e");
+                   }
+                 }
+               } else {
+                 print("No serialized-server-data script found.");
+               }
+            }
+          } else {
+            print("Apple Music failed with status: ${response.statusCode}");
           }
+        } catch (e) {
+          print("Apple Music fetch error: $e");
+        }
+      } else if (url.contains("spotify.com")) {
+        print("Detected Spotify URL");
+        // Parse Spotify URL with Regex for better safety
+        final regExp = RegExp(r'playlist/([a-zA-Z0-9]+)');
+        final match = regExp.firstMatch(url);
+        
+        if (match != null) {
+          final playlistId = match.group(1);
+          if (playlistId != null) {
+             print("Fetching Spotify Playlist ID: $playlistId");
+             try {
+               final playlist = await _spotifyApiService.getPlaylist(playlistId);
+               print("Spotify Playlist Meta fetched: ${playlist?.name}");
+               
+               final tracks = await _spotifyApiService.getPlaylistTracks(playlistId);
+               print("Spotify Playlist Tracks fetched: ${tracks.length}");
+               
+               if (playlist != null) {
+                  return ImportedPlaylist(
+                    title: playlist.name ?? "Imported Playlist",
+                    songs: tracks.map((t) => Song(
+                      videoId: "",
+                      title: t.name ?? "",
+                      artist: t.artists?.map((a) => a.name).join(", ") ?? "",
+                      thumbnailUrl: t.album?.images?.isNotEmpty == true ? (t.album!.images!.first.url ?? "") : "",
+                    )).toList(),
+                  );
+               }
+             } catch (e) {
+               print("Error fetching Spotify data: $e");
+             }
+          }
+        } else {
+          print("Could not extract Spotify Playlist ID from URL via Regex");
         }
       } else if (url.contains("music.youtube.com") || url.contains("youtube.com")) {
+        print("Detected YouTube URL");
         // Parse YouTube URL
         final uri = Uri.parse(url);
         final listId = uri.queryParameters['list'];
         
         if (listId != null) {
+          print("Fetching YouTube Playlist ID: $listId");
           final data = await _youtubeApiService.getPlaylist(listId);
           
-          // Parse InnerTube Response (This is complex, simplified for now)
-          // We need to navigate the JSON to find tracks.
-          // Usually: contents -> twoColumnBrowseResultsRenderer -> tabs -> tabRenderer -> content -> sectionListRenderer -> contents -> musicPlaylistShelfRenderer -> contents
-          
           try {
-             final tabs = data['contents']?['twoColumnBrowseResultsRenderer']?['tabs'] as List?;
-             final tab = tabs?.firstWhere((t) => t['tabRenderer']?['selected'] == true);
-             final content = tab?['tabRenderer']?['content']?['sectionListRenderer']?['contents']?.first;
-             final playlistShelf = content?['musicPlaylistShelfRenderer'];
-             
-             final title = data['header']?['musicDetailHeaderRenderer']?['title']?['runs']?.first?['text'] ?? "Imported Playlist";
-             
-             final items = playlistShelf?['contents'] as List?;
-             if (items != null) {
-               final songs = <Song>[];
-               for (final item in items) {
-                 final mrl = item['musicResponsiveListItemRenderer'];
-                 if (mrl != null) {
-                   final title = mrl['flexColumns']?[0]?['musicResponsiveListItemFlexColumnRenderer']?['text']?['runs']?[0]?['text'];
-                   final artist = mrl['flexColumns']?[1]?['musicResponsiveListItemFlexColumnRenderer']?['text']?['runs']?[0]?['text'];
-                   final videoId = mrl['playlistItemData']?['videoId'];
-                   final thumbnail = mrl['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails']?.last?['url'];
-                   
-                   if (title != null && videoId != null) {
-                     songs.add(Song(
-                       videoId: videoId,
-                       title: title,
-                       artist: artist ?? "Unknown",
-                       thumbnailUrl: thumbnail ?? "",
-                     ));
-                   }
+             // Robust traversing for musicPlaylistShelfRenderer
+             dynamic findShelf(dynamic json) {
+               if (json is Map) {
+                 if (json.containsKey('musicPlaylistShelfRenderer')) {
+                   return json['musicPlaylistShelfRenderer'];
+                 }
+                 for (final value in json.values) {
+                   final result = findShelf(value);
+                   if (result != null) return result;
+                 }
+               } else if (json is List) {
+                 for (final item in json) {
+                   final result = findShelf(item);
+                   if (result != null) return result;
                  }
                }
-               return ImportedPlaylist(title: title, songs: songs);
+               return null;
+             }
+             
+             final playlistShelf = findShelf(data);
+             
+             // Extract Title
+             String title = "Imported Playlist";
+             try {
+               // Try various title paths
+               title = data['header']?['musicDetailHeaderRenderer']?['title']?['runs']?.first?['text'] 
+                    ?? data['header']?['musicEditablePlaylistDetailHeaderRenderer']?['header']?['musicDetailHeaderRenderer']?['title']?['runs']?.first?['text']
+                    ?? "Imported Playlist";
+             } catch (_) {}
+
+             if (playlistShelf != null) {
+               final items = playlistShelf['contents'] as List?;
+               if (items != null) {
+                 final songs = <Song>[];
+                 for (final item in items) {
+                   final mrl = item['musicResponsiveListItemRenderer'];
+                   if (mrl != null) {
+                     final title = mrl['flexColumns']?[0]?['musicResponsiveListItemFlexColumnRenderer']?['text']?['runs']?[0]?['text'];
+                     
+                     // Artist often in second column
+                     String artist = "Unknown";
+                     try {
+                        final runs = mrl['flexColumns']?[1]?['musicResponsiveListItemFlexColumnRenderer']?['text']?['runs'] as List?;
+                        if (runs != null && runs.isNotEmpty) {
+                          // Join all text parts to get full artist string (sometimes "Artist • Album")
+                          artist = runs.map((r) => r['text']).join("");
+                        }
+                     } catch (_) {}
+                     
+                     final videoId = mrl['playlistItemData']?['videoId'];
+                     final thumbnail = mrl['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails']?.last?['url'];
+                     
+                     if (title != null && videoId != null) {
+                       songs.add(Song(
+                         videoId: videoId,
+                         title: title,
+                         artist: artist,
+                         thumbnailUrl: thumbnail ?? "",
+                       ));
+                     }
+                   }
+                 }
+                 return ImportedPlaylist(title: title, songs: songs);
+               }
+             } else {
+               print("Could not find musicPlaylistShelfRenderer in YouTube response");
              }
           } catch (e) {
             print("Error parsing YouTube playlist: $e");

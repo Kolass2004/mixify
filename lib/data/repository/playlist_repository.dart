@@ -44,6 +44,7 @@ class PlaylistRepository {
           name: p['name'],
           songs: songs,
           imagePath: p['imagePath'],
+          source: p['source'], // Read source
         );
         await _box.put(playlist.id, playlist);
       }
@@ -63,9 +64,9 @@ class PlaylistRepository {
   // Expose listenable for UI updates
   ValueListenable<Box<LocalPlaylist>> get boxListenable => _box.listenable();
 
-  Future<void> createPlaylist(String name) async {
+  Future<void> createPlaylist(String name, {String? source}) async {
     final id = const Uuid().v4();
-    final playlist = LocalPlaylist(id: id, name: name, songs: []);
+    final playlist = LocalPlaylist(id: id, name: name, songs: [], source: source);
     await _box.put(id, playlist);
     _syncPlaylist(playlist);
   }
@@ -104,6 +105,7 @@ class PlaylistRepository {
       'id': playlist.id,
       'name': playlist.name,
       'imagePath': playlist.imagePath,
+      'source': playlist.source, // Save source
       'songs': playlist.songs.map((s) => {
         'videoId': s.videoId,
         'title': s.title,

@@ -454,11 +454,30 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with SingleTicker
                         borderRadius: BorderRadius.circular(8),
                       ),
                       clipBehavior: Clip.antiAlias,
-                      child: playlist.imagePath != null 
-                        ? Image.file(File(playlist.imagePath!), fit: BoxFit.cover)
-                        : playlist.songs.isEmpty 
-                          ? const Icon(Icons.music_note, color: AppColors.black)
-                          : _buildPlaylistCollage(playlist),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          playlist.imagePath != null 
+                            ? Image.file(File(playlist.imagePath!), fit: BoxFit.cover)
+                            : playlist.songs.isEmpty 
+                              ? const Icon(Icons.music_note, color: AppColors.black)
+                              : _buildPlaylistCollage(playlist),
+                          
+                          if (playlist.source != null)
+                            Positioned(
+                              top: 4,
+                              right: 4,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.7),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: _buildSourceIcon(playlist.source!),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                     title: Text(
                       playlist.name,
@@ -565,6 +584,26 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> with SingleTicker
         ],
       ),
     );
+  }
+
+  Widget _buildSourceIcon(String source) {
+    String iconUrl = "";
+    Color color = Colors.white;
+
+    if (source == "Spotify") {
+      iconUrl = "https://upload.wikimedia.org/wikipedia/commons/thumb/1/19/Spotify_logo_without_text.svg/512px-Spotify_logo_without_text.svg.png";
+      color = const Color(0xFF1DB954);
+    } else if (source == "YouTube") {
+      iconUrl = "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Youtube_Music_icon.svg/512px-Youtube_Music_icon.svg.png";
+      color = Colors.red;
+    } else if (source == "Apple") {
+      iconUrl = "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/Apple_Music_logo.svg/512px-Apple_Music_logo.svg.png";
+      color = const Color(0xFFFC3C44);
+    }
+
+    if (iconUrl.isEmpty) return const SizedBox.shrink();
+
+    return Image.network(iconUrl, width: 12, height: 12);
   }
 }
 

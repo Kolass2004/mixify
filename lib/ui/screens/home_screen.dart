@@ -192,7 +192,7 @@ class HomeScreen extends ConsumerWidget {
                    child: Center(child: CircularProgressIndicator(color: theme.colorScheme.onSurface)),
                 ),
                 error: (error, stack) => SliverFillRemaining(
-                   // If connectivity check fails, assume offline? Or just show error.
+                  
                    child: _buildOfflineUI(context, theme),
                 ),
               ),

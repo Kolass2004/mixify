@@ -50,10 +50,14 @@ class LocalPlaylist extends HiveObject {
   @HiveField(3)
   String? imagePath;
 
+  @HiveField(4)
+  String? source; // "Spotify", "YouTube", "Apple"
+
   LocalPlaylist({
     required this.id,
     required this.name,
     this.songs = const [],
     this.imagePath,
+    this.source,
   });
 }

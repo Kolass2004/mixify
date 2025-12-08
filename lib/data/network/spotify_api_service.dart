@@ -3,8 +3,8 @@ import 'package:spotify/spotify.dart';
 class SpotifyApiService {
   // TODO: Replace with your own Client ID and Client Secret
   // You can get them from https://developer.spotify.com/dashboard
-  static const String _clientId = '8ddbbf24b0aa467bb8583572952c1684';
-  static const String _clientSecret = '4f3121ce10ef42babc89a91be39a9171';
+  static const String _clientId = '2720ce2c729c4f308a029f762ca0a5d1';
+  static const String _clientSecret = '0be714e6e08c420ea94fcbb56b57a2eb';
 
   late SpotifyApi _spotify;
 

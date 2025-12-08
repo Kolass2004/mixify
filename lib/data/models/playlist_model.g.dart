@@ -20,19 +20,25 @@ class LocalPlaylistAdapter extends TypeAdapter<LocalPlaylist> {
       id: fields[0] as String,
       name: fields[1] as String,
       songs: (fields[2] as List).cast<HiveSong>(),
+      imagePath: fields[3] as String?,
+      source: fields[4] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, LocalPlaylist obj) {
     writer
-      ..writeByte(3)
+      ..writeByte(5)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
       ..write(obj.name)
       ..writeByte(2)
-      ..write(obj.songs);
+      ..write(obj.songs)
+      ..writeByte(3)
+      ..write(obj.imagePath)
+      ..writeByte(4)
+      ..write(obj.source);
   }
 
   @override

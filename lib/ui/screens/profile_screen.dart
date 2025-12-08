@@ -23,130 +23,129 @@ class ProfileScreen extends ConsumerWidget {
       valueListenable: prefs.boxListenable,
       builder: (context, box, _) {
         final isDark = prefs.isDarkMode;
-        final textColor = isDark ? AppColors.white : AppColors.black;
-        final bgColor = isDark ? AppColors.black : AppColors.yellow;
-        final accentColor = isDark ? AppColors.yellow : AppColors.red;
+        final theme = Theme.of(context);
+        final textColor = theme.colorScheme.onBackground;
+        final backgroundColor = theme.scaffoldBackgroundColor;
+        final primaryColor = theme.colorScheme.primary;
 
-          return Scaffold(
-          backgroundColor: bgColor,
-          body: SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+        return Scaffold(
+          backgroundColor: backgroundColor,
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 const SizedBox(height: 40),
-                Center(
+                // Profile Avatar with Glow
+                Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: primaryColor.withOpacity(0.3),
+                        blurRadius: 20,
+                        spreadRadius: 5,
+                      ),
+                    ],
+                  ),
+                  child: CircleAvatar(
+                    radius: 60,
+                    backgroundColor: Colors.grey[800],
+                    backgroundImage: NetworkImage(user?.photoURL ?? "https://i.pravatar.cc/300"),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                
+                // User Info
+                Text(
+                  user?.displayName ?? "Mixify User",
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  user?.email ?? "",
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: textColor.withOpacity(0.6),
+                  ),
+                ),
+                
+                const SizedBox(height: 24),
+                
+                // Premium Badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFFD700), Color(0xFFFFA500)], // Gold Gradient
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.orange.withOpacity(0.3),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: const Text(
+                    "PREMIUM MEMBER",
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.2,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 40),
+                
+                // Menu Options
+                Container(
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.grey[900] : Colors.grey[100],
+                    borderRadius: BorderRadius.circular(20),
+                  ),
                   child: Column(
                     children: [
-                      Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: textColor, width: 2),
-                          image: DecorationImage(
-                            image: NetworkImage(user?.photoURL ?? "https://i.pravatar.cc/300"),
-                            fit: BoxFit.cover,
-                          ),
-                        ),
+                      _buildProfileTile(
+                        icon: Icons.settings_rounded,
+                        title: "Settings",
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                          );
+                        },
+                        isDark: isDark,
                       ),
-                      const SizedBox(height: 16),
-                      Text(
-                        user?.displayName ?? "Mixify User",
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: textColor,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        user?.email ?? "",
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: textColor.withOpacity(0.7),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: accentColor,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          "PREMIUM",
-                          style: TextStyle(
-                            color: isDark ? Colors.black : Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
+                      Divider(height: 1, color: Colors.grey.withOpacity(0.2)),
+                      _buildProfileTile(
+                         icon: isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                         title: "Dark Mode",
+                         trailing: Switch(
+                           value: isDark,
+                           activeColor: primaryColor,
+                           onChanged: (value) => prefs.setDarkMode(value),
+                         ),
+                         isDark: isDark,
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 40),
-                ListTile(
-                  leading: Icon(Icons.settings, color: textColor),
-                  title: Text("Settings", style: TextStyle(color: textColor, fontSize: 18)),
-                  trailing: Icon(Icons.arrow_forward_ios, color: textColor, size: 16),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const SettingsScreen()),
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.equalizer, color: textColor),
-                  title: Text("Equalizer", style: TextStyle(color: textColor, fontSize: 18)),
-                  trailing: Icon(Icons.arrow_forward_ios, color: textColor, size: 16),
-                  onTap: () async {
-                    try {
-                      final audioHandler = ref.read(audioHandlerProvider);
-                      final sessionId = audioHandler.androidAudioSessionId;
-                      
-                      debugPrint("Equalizer: Session ID: $sessionId");
 
-                      if (sessionId != null) {
-                        final intent = AndroidIntent(
-                          action: 'android.media.action.DISPLAY_AUDIO_EFFECT_CONTROL_PANEL',
-                          flags: const [0x10000000], // FLAG_ACTIVITY_NEW_TASK
-                          arguments: <String, dynamic>{
-                            'android.media.extra.AUDIO_SESSION': sessionId,
-                            'android.media.extra.PACKAGE_NAME': context.packageName,
-                            'android.media.extra.CONTENT_TYPE': 0, // CONTENT_TYPE_MUSIC
-                          },
-                        );
-                        await intent.launch();
-                      } else {
-                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text("Please play a song first to initialize the equalizer.")),
-                        );
-                      }
-                    } catch (e) {
-                      debugPrint("Equalizer Error: $e");
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text("No equalizer found on this device.")),
-                        );
-                      }
-                    }
-                  },
-                ),
-                SwitchListTile(
-                  secondary: Icon(isDark ? Icons.dark_mode : Icons.light_mode, color: textColor),
-                  title: Text("Dark Mode", style: TextStyle(color: textColor, fontSize: 18)),
-                  value: isDark,
-                  activeColor: accentColor,
-                  onChanged: (value) {
-                    prefs.setDarkMode(value);
-                  },
-                ),
                 const SizedBox(height: 40),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 120.0), // Extra padding for mini player
-                  child: TextButton.icon(
+
+                // Logout Button
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton(
                     onPressed: () async {
                       // 1. CLEAR PLAYER (Memory)
                       final audioHandler = ref.read(audioHandlerProvider);
@@ -159,13 +158,12 @@ class ProfileScreen extends ConsumerWidget {
                       // 2. CLEAR DATA (Storage)
                       await prefs.clearUserData();
                       await ref.read(playlistRepositoryProvider).clearLocalData();
-                      await ref.read(musicRepositoryProvider).clearHomeCache(); // Clear Home Cache
+                      await ref.read(musicRepositoryProvider).clearHomeCache();
 
                       // 3. INVALIDATE PROVIDERS (Memory)
                       ref.invalidate(homeSectionsProvider);
                       ref.invalidate(historyStreamProvider);
-                      // Invalidate other user-specific providers if any
-                      
+
                       // 4. SIGN OUT
                       await AuthService().signOut();
                       
@@ -176,19 +174,60 @@ class ProfileScreen extends ConsumerWidget {
                         );
                       }
                     },
-                    icon: Icon(Icons.logout, color: accentColor),
-                    label: Text(
-                      "Logout",
-                      style: TextStyle(color: accentColor, fontSize: 18, fontWeight: FontWeight.bold),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent.withOpacity(0.1),
+                      foregroundColor: Colors.redAccent,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(color: Colors.redAccent.withOpacity(0.5)),
+                      ),
+                    ),
+                    child: const Text(
+                      "Log Out",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
+                const SizedBox(height: 80), // Bottom padding
               ],
             ),
-            ),
-          );
-
+          ),
+        );
       },
+    );
+  }
+
+  Widget _buildProfileTile({
+    required IconData icon,
+    required String title,
+    VoidCallback? onTap,
+    Widget? trailing,
+    required bool isDark,
+  }) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.grey[800] : Colors.grey[200],
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: isDark ? Colors.white : Colors.black, size: 20),
+      ),
+      title: Text(
+        title,
+        style: TextStyle(
+          color: isDark ? Colors.white : Colors.black,
+          fontWeight: FontWeight.w600,
+          fontSize: 16,
+        ),
+      ),
+      trailing: trailing ?? Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey[500]),
+      onTap: onTap,
     );
   }
 }
