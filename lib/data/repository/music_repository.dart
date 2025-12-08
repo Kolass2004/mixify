@@ -342,23 +342,36 @@ class MusicRepository {
   }
 
   Future<void> clearHomeCache() async {
-    await _cacheBox.delete('home_sections_v3');
-    await _cacheBox.delete('home_sections_timestamp_v3');
+    await _cacheBox.delete('home_sections_v4');
+    await _cacheBox.delete('home_sections_timestamp_v4');
   }
 
   Future<List<HomeSection>> getHomeSections() async {
     // 1. Check Cache
     try {
-      final timestamp = _cacheBox.get('home_sections_timestamp_v3');
+      final timestamp = _cacheBox.get('home_sections_timestamp_v4');
       if (timestamp != null) {
         final difference = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(timestamp));
         // Cache valid for 1 hour
         if (difference.inHours < 1) {
-           final cachedData = _cacheBox.get('home_sections_v3');
+           final cachedData = _cacheBox.get('home_sections_v4');
            if (cachedData != null) {
-             print("Loading Home Sections from Cache");
              final List<dynamic> decoded = cachedData;
-             return decoded.map((e) => HomeSection.fromJson(Map<String, dynamic>.from(e))).toList();
+             final sections = decoded.map((e) => HomeSection.fromJson(Map<String, dynamic>.from(e))).toList();
+             
+             // Smart Cache Validation:
+             // If User has history, but Cache shows "Recommended" (or no "Speed dial"), then Cache is STALE (from before sync).
+             // We must invalidate it to show "Recents".
+             final hasHistory = _userPreferences.getSongHistory().isNotEmpty;
+             final cacheHasRecents = sections.any((s) => s.title == "Speed dial");
+             
+             if (hasHistory && !cacheHasRecents) {
+               print("Cache invalid: User has history but cache shows Recommended. Forcing refresh.");
+               // Proceed to fetch fresh data
+             } else {
+               print("Loading Home Sections from Cache");
+               return sections;
+             }
            }
         }
       }
@@ -394,6 +407,19 @@ class MusicRepository {
           title: "Speed dial",
           items: quickDialItems.take(9).toList(),
         ));
+      } else {
+        // Fallback for new users: Show Recommended (Language Hits) in 3x3 grid
+        try {
+          final recommendedTracks = await _spotifyApiService.getLanguageHits(languageName);
+          if (recommendedTracks.isNotEmpty) {
+            sections.add(HomeSection(
+              title: "Recommended",
+              items: _mapSpotifyTracksToMusicItems(recommendedTracks).take(9).toList(),
+            ));
+          }
+        } catch (e) {
+          print("Error fetching recommended for quick dial: $e");
+        }
       }
 
       // Prepare Futures for parallel execution
@@ -550,8 +576,8 @@ class MusicRepository {
       if (sections.isNotEmpty) {
         try {
            final encoded = sections.map((s) => s.toJson()).toList();
-           await _cacheBox.put('home_sections_v3', encoded);
-           await _cacheBox.put('home_sections_timestamp_v3', DateTime.now().millisecondsSinceEpoch);
+           await _cacheBox.put('home_sections_v4', encoded);
+           await _cacheBox.put('home_sections_timestamp_v4', DateTime.now().millisecondsSinceEpoch);
         } catch (e) {
            print("Error saving to cache: $e");
         }
@@ -562,7 +588,7 @@ class MusicRepository {
       print("Error fetching home sections: $e");
       // Try to return stale cache
       try {
-         final cachedData = _cacheBox.get('home_sections_v3');
+         final cachedData = _cacheBox.get('home_sections_v4');
          if (cachedData != null) {
            final List<dynamic> decoded = cachedData;
            return decoded.map((e) => HomeSection.fromJson(Map<String, dynamic>.from(e))).toList();
@@ -575,7 +601,7 @@ class MusicRepository {
   Future<HomeSection?> _fetchSection(Future<HomeSection?> Function() fetcher) async {
     try {
       // Timeout after 4 seconds to prevent blocking
-      return await fetcher().timeout(const Duration(seconds: 4));
+      return await fetcher().timeout(const Duration(seconds: 12));
     } catch (e) {
       print("Section fetch failed or timed out: $e");
       return null;

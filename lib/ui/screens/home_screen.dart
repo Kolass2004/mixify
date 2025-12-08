@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:mixify/ui/screens/category_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mixify/data/models/innertube_models.dart';
@@ -11,8 +12,17 @@ import 'package:mixify/ui/screens/main_screen.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:mixify/ui/screens/section_view_screen.dart';
+final historyStreamProvider = StreamProvider<BoxEvent>((ref) {
+  final prefs = ref.watch(userPreferencesProvider);
+  return prefs.historyStream;
+});
+
 final homeSectionsProvider = FutureProvider<List<HomeSection>>((ref) async {
   final repository = ref.watch(musicRepositoryProvider);
+  
+  // Watch history changes to trigger re-fetch when sync completes
+  ref.watch(historyStreamProvider);
+  
   return repository.getHomeSections();
 });
 
@@ -32,6 +42,11 @@ class HomeScreen extends ConsumerWidget {
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
+            // Ensure we try to sync again in case initial sync failed
+            await ref.read(userPreferencesProvider).syncFromCloud();
+            // Also sync playlists
+            ref.read(playlistRepositoryProvider).syncFromCloud();
+            
             await ref.read(musicRepositoryProvider).clearHomeCache();
             return ref.refresh(homeSectionsProvider.future);
           },
@@ -92,11 +107,11 @@ class HomeScreen extends ConsumerWidget {
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                if (section.title == "Speed dial") ...[
+                                if (section.title == "Speed dial" || section.title == "Recommended") ...[
                                   Padding(
                                     padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
                                     child: Text(
-                                      "Recents",
+                                      section.title == "Speed dial" ? "Recents" : "Recommended",
                                       style: theme.textTheme.headlineSmall?.copyWith(
                                         fontWeight: FontWeight.bold,
                                         color: theme.colorScheme.onSurface,
@@ -550,7 +565,7 @@ class HomeScreen extends ConsumerWidget {
   }
   Widget _buildNewReleasesList(BuildContext context, List<MusicItem> items, WidgetRef ref) {
     return SizedBox(
-      height: 180,
+      height: 210,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 24),

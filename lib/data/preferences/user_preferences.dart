@@ -57,7 +57,7 @@ class UserPreferences {
     _syncSettings();
   }
   
-  bool get isDarkMode => _box.get(_keyThemeMode, defaultValue: false);
+  bool get isDarkMode => _box.get(_keyThemeMode, defaultValue: true);
   
   Future<void> setDarkMode(bool isDark) async {
     await _box.put(_keyThemeMode, isDark);
@@ -132,6 +132,9 @@ class UserPreferences {
     }
     return [];
   }
+
+  Stream<BoxEvent> get historyStream => _box.watch(key: _keyHistory);
+
   Future<void> clearUserData() async {
     await _box.delete(_keyRegion);
     await _box.delete(_keyLanguage);

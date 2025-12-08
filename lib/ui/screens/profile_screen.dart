@@ -8,6 +8,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:mixify/data/services/auth_service.dart';
 import 'package:mixify/ui/screens/onboarding_screen.dart';
 import 'package:android_intent_plus/android_intent.dart';
+import 'package:mixify/ui/screens/home_screen.dart';
+import 'package:mixify/player/mixify_audio_handler.dart';
+
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
@@ -145,14 +148,27 @@ class ProfileScreen extends ConsumerWidget {
                   padding: const EdgeInsets.only(bottom: 120.0), // Extra padding for mini player
                   child: TextButton.icon(
                     onPressed: () async {
-                      // Stop audio playback
-                      await ref.read(audioHandlerProvider).stop();
+                      // 1. CLEAR PLAYER (Memory)
+                      final audioHandler = ref.read(audioHandlerProvider);
+                      if (audioHandler is MixifyAudioHandler) {
+                        await audioHandler.clear();
+                      } else {
+                        await audioHandler.stop();
+                      }
 
-                      // Clear local data
+                      // 2. CLEAR DATA (Storage)
                       await prefs.clearUserData();
                       await ref.read(playlistRepositoryProvider).clearLocalData();
+                      await ref.read(musicRepositoryProvider).clearHomeCache(); // Clear Home Cache
+
+                      // 3. INVALIDATE PROVIDERS (Memory)
+                      ref.invalidate(homeSectionsProvider);
+                      ref.invalidate(historyStreamProvider);
+                      // Invalidate other user-specific providers if any
                       
+                      // 4. SIGN OUT
                       await AuthService().signOut();
+                      
                       if (context.mounted) {
                         Navigator.of(context).pushAndRemoveUntil(
                           MaterialPageRoute(builder: (_) => const OnboardingScreen()),

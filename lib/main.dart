@@ -15,6 +15,7 @@ import 'package:mixify/data/repository/music_repository.dart';
 import 'package:mixify/data/repository/playlist_repository.dart';
 import 'package:mixify/player/mixify_audio_handler.dart';
 import 'package:mixify/ui/screens/main_screen.dart';
+import 'package:mixify/ui/screens/home_screen.dart';
 import 'package:mixify/ui/screens/onboarding_screen.dart';
 
 class AppColors {
@@ -79,9 +80,14 @@ class MixifyApp extends ConsumerWidget {
     final prefs = ref.watch(userPreferencesProvider);
     
     // Force sync on app load if user is logged in
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (FirebaseAuth.instance.currentUser != null) {
-        prefs.syncFromCloud();
+        await prefs.syncFromCloud();
+        // Refresh home sections after sync to ensure "Recents" are shown instead of "Recommended"
+        if (context.mounted) {
+           await ref.read(musicRepositoryProvider).clearHomeCache(); // Clear cache to prevent showing stale "Recommended" data
+           ref.refresh(homeSectionsProvider);
+        }
         ref.read(playlistRepositoryProvider).syncFromCloud();
       }
     });

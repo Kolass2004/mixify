@@ -225,7 +225,7 @@ class MixifyAudioHandler extends BaseAudioHandler {
     queue.add(items);
     
     // Set Loop Mode to all by default for playlists (as requested)
-    await _player.setLoopMode(LoopMode.all);
+    // await _player.setLoopMode(LoopMode.all);
     
     // Play the selected item
     await _skipToindex(index);
@@ -505,4 +505,11 @@ class MixifyAudioHandler extends BaseAudioHandler {
   }
 
   int? get androidAudioSessionId => _player.androidAudioSessionId;
+
+  Future<void> clear() async {
+    await stop();
+    queue.add([]);
+    mediaItem.add(null);
+    _skipId = 0;
+  }
 }

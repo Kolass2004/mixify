@@ -69,7 +69,7 @@ class _SpotifyPlaylistDetailScreenState extends ConsumerState<SpotifyPlaylistDet
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 300,
+            expandedHeight: 360,
             pinned: true,
             backgroundColor: backgroundColor,
             leading: IconButton(
